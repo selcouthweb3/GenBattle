@@ -90,7 +90,7 @@ async function attack() {
       address: contractAddress,
       functionName: 'attack',
       args: [currentTurn.value, move.value],
-      value: 0,
+      value: BigInt(0),
     })
     await client.waitForTransactionReceipt({
       hash: txHash,
