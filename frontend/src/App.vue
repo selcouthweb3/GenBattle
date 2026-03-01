@@ -41,7 +41,7 @@ import { createClient, createAccount } from 'genlayer-js'
 import { studionet } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 
-const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS as `0x${string}`
+const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS ?? '') as '0x${string}'
 const account = createAccount()
 const client = createClient({ chain: studionet, account })
 
@@ -64,7 +64,7 @@ async function startBattle() {
       address: contractAddress,
       functionName: 'reset_battle',
       args: [player1.value, player2.value],
-      value: 0,
+      value: BigInt(0),
     })
     await client.waitForTransactionReceipt({
       hash: txHash,
