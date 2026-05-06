@@ -1,6 +1,8 @@
 # { "Depends": "py-genlayer:test" }
 
+import re
 from genlayer import *
+
 
 class GenBattle(gl.Contract):
     player1: str
@@ -39,13 +41,31 @@ class GenBattle(gl.Contract):
         assert self.winner == "", "Battle is already over"
         assert attacker == self.current_turn, "It's not your turn"
 
-        result = gl.exec_prompt(
-            f"A fighter named {attacker} uses the move '{move}' in a battle. "
-            f"Based on the move name and creativity, calculate a damage value between 5 and 30. "
-            f"Respond with only a number between 5 and 30."
+        def compute_damage() -> int:
+            response = gl.nondet.exec_prompt(
+                f"A fighter named {attacker} uses the move '{move}' in a battle. "
+                f"Based on the move's name and creativity, decide how much damage it deals. "
+                f"Reply with only a single integer between 5 and 30. No words, no punctuation, no explanation."
+            )
+            match = re.search(r"\d+", response)
+            if match is None:
+                return 15
+            value = int(match.group())
+            if value < 5:
+                return 5
+            if value > 30:
+                return 30
+            return value
+
+        raw_damage = gl.eq_principle.prompt_comparative(
+            compute_damage,
+            principle=(
+                "Both answers must be integers between 5 and 30. "
+                "They are equivalent if their absolute difference is 5 or less."
+            ),
         )
 
-        damage = u256(int(result.strip()))
+        damage = u256(raw_damage)
 
         if attacker == self.player1:
             if damage >= self.player2_health:
@@ -74,8 +94,3 @@ class GenBattle(gl.Contract):
         self.current_turn = player1
         self.winner = ""
         self.battle_log = DynArray[str]()
-
-
-pwd
-
-
