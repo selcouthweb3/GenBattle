@@ -1,4 +1,4 @@
-# { "Depends": "py-genlayer:test" }
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import re
 from genlayer import *
@@ -20,7 +20,6 @@ class GenBattle(gl.Contract):
         self.player2_health = u256(100)
         self.current_turn = player1
         self.winner = ""
-        self.battle_log = DynArray[str]()
 
     @gl.public.view
     def get_battle_status(self) -> str:
@@ -93,4 +92,3 @@ class GenBattle(gl.Contract):
         self.player2_health = u256(100)
         self.current_turn = player1
         self.winner = ""
-        self.battle_log = DynArray[str]()
