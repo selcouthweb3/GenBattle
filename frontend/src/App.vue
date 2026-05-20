@@ -38,12 +38,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { createClient, createAccount } from 'genlayer-js'
-import { studionet } from 'genlayer-js/chains'
+import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 
 const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS ?? '') as '0x${string}'
 const account = createAccount()
-const client = createClient({ chain: studionet, account })
+const client = createClient({ chain: testnetBradbury, account })
 
 const player1 = ref('')
 const player2 = ref('')
