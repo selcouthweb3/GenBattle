@@ -1,59 +1,43 @@
 <template>
   <div class="container">
     <h1>⚔️ GenBattle</h1>
-
     <div class="wallet-box" v-if="!walletConnected">
       <button @click="connectWallet">Connect MetaMask</button>
       <p class="error" v-if="error">{{ error }}</p>
     </div>
-
     <div v-if="walletConnected">
       <p class="wallet-info">🟢 Connected: {{ shortAddress }}</p>
-
-      <div class="status-box">
-        <p>{{ battleStatus }}</p>
-      </div>
-
+      <div class="status-box"><p>{{ battleStatus }}</p></div>
       <div class="setup" v-if="!battleStarted">
         <h2>Start a New Battle</h2>
         <input v-model="player1" placeholder="Enter Player 1 name" />
         <input v-model="player2" placeholder="Enter Player 2 name" />
         <button @click="startBattle" :disabled="loading">{{ loading ? 'Starting...' : 'Start Battle' }}</button>
       </div>
-
       <div class="battle" v-if="battleStarted && !winner">
         <h2>⚔️ Attack</h2>
         <p>Current Turn: <strong>{{ currentTurn }}</strong></p>
         <input v-model="move" placeholder="Enter your move (e.g. Thunder Punch)" />
         <button @click="attack" :disabled="loading">{{ loading ? 'Attacking...' : 'Attack!' }}</button>
       </div>
-
       <div class="winner-box" v-if="winner">
         <h2>🏆 {{ winner }} Wins!</h2>
         <button @click="resetBattle">Play Again</button>
       </div>
-
       <div class="log" v-if="battleLog.length">
         <h2>Battle Log</h2>
-        <ul>
-          <li v-for="(entry, index) in battleLog" :key="index">{{ entry }}</li>
-        </ul>
+        <ul><li v-for="(entry, index) in battleLog" :key="index">{{ entry }}</li></ul>
       </div>
-
       <p class="error" v-if="error">{{ error }}</p>
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { createClient, createWalletClient } from 'genlayer-js'
+import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
-import { custom } from 'viem'
-
 const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS ?? '') as `0x${string}`
-
 const player1 = ref('')
 const player2 = ref('')
 const move = ref('')
@@ -66,144 +50,74 @@ const error = ref('')
 const loading = ref(false)
 const walletConnected = ref(false)
 const walletAddress = ref('')
-
 const shortAddress = computed(() =>
-  walletAddress.value ? `${walletAddress.value.slice(0, 6)}...${walletAddress.value.slice(-4)}` : ''
+  walletAddress.value ? walletAddress.value.slice(0, 6) + '...' + walletAddress.value.slice(-4) : ''
 )
-
-let readClient: any = null
-let writeClient: any = null
-
+let client: any = null
+const eth = () => (window as any).ethereum
 async function connectWallet() {
   try {
     error.value = ''
-    if (!(window as any).ethereum) {
-      error.value = 'MetaMask not found. Please install it.'
-      return
-    }
-    const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
+    if (!eth()) { error.value = 'MetaMask not found.'; return }
+    const accounts = await eth().request({ method: 'eth_requestAccounts' })
     walletAddress.value = accounts[0]
-
     try {
-      await (window as any).ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x' + testnetBradbury.id.toString(16) }],
-      })
-    } catch (switchError: any) {
-      if (switchError.code === 4902) {
-        await (window as any).ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x' + testnetBradbury.id.toString(16),
-            chainName: testnetBradbury.name,
-            rpcUrls: [testnetBradbury.rpcUrls.default.http[0]],
-            nativeCurrency: testnetBradbury.nativeCurrency,
-          }],
-        })
+      await eth().request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + testnetBradbury.id.toString(16) }] })
+    } catch (se: any) {
+      if (se.code === 4902) {
+        await eth().request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x' + testnetBradbury.id.toString(16), chainName: testnetBradbury.name, rpcUrls: [testnetBradbury.rpcUrls.default.http[0]], nativeCurrency: testnetBradbury.nativeCurrency }] })
       }
     }
-
-    readClient = createClient({ chain: testnetBradbury })
-
-    writeClient = createWalletClient({
-      chain: testnetBradbury,
-      transport: custom((window as any).ethereum),
-      account: walletAddress.value as `0x${string}`,
-    })
-
+    client = createClient({ chain: testnetBradbury })
     walletConnected.value = true
     await fetchStatus()
-  } catch (e: any) {
-    error.value = e.message
-  }
+  } catch (e: any) { error.value = e.message }
 }
-
+async function sendTx(functionName: string, args: any[]) {
+  const txHash = await client.writeContract({
+    address: contractAddress,
+    functionName,
+    args,
+    value: BigInt(0),
+    account: walletAddress.value as `0x${string}`,
+    transport: eth(),
+  })
+  await client.waitForTransactionReceipt({ hash: txHash, status: TransactionStatus.ACCEPTED })
+}
 async function startBattle() {
   try {
-    loading.value = true
-    error.value = ''
-    const txHash = await writeClient.writeContract({
-      address: contractAddress,
-      functionName: 'reset_battle',
-      args: [player1.value, player2.value],
-      value: BigInt(0),
-    })
-    await readClient.waitForTransactionReceipt({
-      hash: txHash,
-      status: TransactionStatus.ACCEPTED,
-    })
-    battleStarted.value = true
-    currentTurn.value = player1.value
-    winner.value = ''
-    battleLog.value = []
+    loading.value = true; error.value = ''
+    await sendTx('reset_battle', [player1.value, player2.value])
+    battleStarted.value = true; currentTurn.value = player1.value; winner.value = ''; battleLog.value = []
     await fetchStatus()
-  } catch (e: any) {
-    error.value = e.message
-  } finally {
-    loading.value = false
-  }
+  } catch (e: any) { error.value = e.message } finally { loading.value = false }
 }
-
 async function attack() {
   try {
-    loading.value = true
-    error.value = ''
-    const txHash = await writeClient.writeContract({
-      address: contractAddress,
-      functionName: 'attack',
-      args: [currentTurn.value, move.value],
-      value: BigInt(0),
-    })
-    await readClient.waitForTransactionReceipt({
-      hash: txHash,
-      status: TransactionStatus.ACCEPTED,
-    })
+    loading.value = true; error.value = ''
+    await sendTx('attack', [currentTurn.value, move.value])
     move.value = ''
     await fetchStatus()
-  } catch (e: any) {
-    error.value = e.message
-  } finally {
-    loading.value = false
-  }
+  } catch (e: any) { error.value = e.message } finally { loading.value = false }
 }
-
 async function fetchStatus() {
   try {
-    const status = await readClient.readContract({
-      address: contractAddress,
-      functionName: 'get_battle_status',
-      args: [],
-    })
+    const status = await client.readContract({ address: contractAddress, functionName: 'get_battle_status', args: [] })
     battleStatus.value = status as string
-
-    const log = await readClient.readContract({
-      address: contractAddress,
-      functionName: 'get_battle_log',
-      args: [],
-    })
+    const log = await client.readContract({ address: contractAddress, functionName: 'get_battle_log', args: [] })
     battleLog.value = (log as string).split(' | ').filter(Boolean)
-
     if ((status as string).includes('Winner')) {
       winner.value = (status as string).split('Winner: ')[1]
     } else {
       const parts = (status as string).split('Current Turn: ')
       if (parts[1]) currentTurn.value = parts[1]
     }
-  } catch (e: any) {
-    error.value = e.message
-  }
+  } catch (e: any) { error.value = e.message }
 }
-
 async function resetBattle() {
-  battleStarted.value = false
-  winner.value = ''
-  battleStatus.value = 'No active battle'
-  battleLog.value = []
-  player1.value = ''
-  player2.value = ''
+  battleStarted.value = false; winner.value = ''; battleStatus.value = 'No active battle'; battleLog.value = []; player1.value = ''; player2.value = ''
 }
 </script>
-
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0f0f1a; color: #fff; font-family: 'Segoe UI', sans-serif; }
