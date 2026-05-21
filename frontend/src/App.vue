@@ -47,9 +47,10 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { createClient } from 'genlayer-js'
+import { createClient, createWalletClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
+import { custom } from 'viem'
 
 const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS ?? '') as `0x${string}`
 
@@ -70,7 +71,8 @@ const shortAddress = computed(() =>
   walletAddress.value ? `${walletAddress.value.slice(0, 6)}...${walletAddress.value.slice(-4)}` : ''
 )
 
-let client: any = null
+let readClient: any = null
+let writeClient: any = null
 
 async function connectWallet() {
   try {
@@ -101,9 +103,12 @@ async function connectWallet() {
       }
     }
 
-    client = createClient({
+    readClient = createClient({ chain: testnetBradbury })
+
+    writeClient = createWalletClient({
       chain: testnetBradbury,
-      account: { address: walletAddress.value as `0x${string}` },
+      transport: custom((window as any).ethereum),
+      account: walletAddress.value as `0x${string}`,
     })
 
     walletConnected.value = true
@@ -117,13 +122,13 @@ async function startBattle() {
   try {
     loading.value = true
     error.value = ''
-    const txHash = await client.writeContract({
+    const txHash = await writeClient.writeContract({
       address: contractAddress,
       functionName: 'reset_battle',
       args: [player1.value, player2.value],
       value: BigInt(0),
     })
-    await client.waitForTransactionReceipt({
+    await readClient.waitForTransactionReceipt({
       hash: txHash,
       status: TransactionStatus.ACCEPTED,
     })
@@ -143,13 +148,13 @@ async function attack() {
   try {
     loading.value = true
     error.value = ''
-    const txHash = await client.writeContract({
+    const txHash = await writeClient.writeContract({
       address: contractAddress,
       functionName: 'attack',
       args: [currentTurn.value, move.value],
       value: BigInt(0),
     })
-    await client.waitForTransactionReceipt({
+    await readClient.waitForTransactionReceipt({
       hash: txHash,
       status: TransactionStatus.ACCEPTED,
     })
@@ -164,14 +169,14 @@ async function attack() {
 
 async function fetchStatus() {
   try {
-    const status = await client.readContract({
+    const status = await readClient.readContract({
       address: contractAddress,
       functionName: 'get_battle_status',
       args: [],
     })
     battleStatus.value = status as string
 
-    const log = await client.readContract({
+    const log = await readClient.readContract({
       address: contractAddress,
       functionName: 'get_battle_log',
       args: [],
