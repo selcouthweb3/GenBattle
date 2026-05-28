@@ -37,7 +37,7 @@ import { ref, computed } from 'vue'
 import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
-const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS ?? '') as `0x${string}`
+const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS || '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB') as `0x${string}`
 const player1 = ref('')
 const player2 = ref('')
 const move = ref('')
@@ -54,7 +54,15 @@ const shortAddress = computed(() =>
   walletAddress.value ? walletAddress.value.slice(0, 6) + '...' + walletAddress.value.slice(-4) : ''
 )
 let client: any = null
-const eth = () => (window as any).ethereum
+const eth = () => {
+  const e = (window as any).ethereum
+  if (!e) return null
+  // Multiple wallet extensions inject a providers[] array; pick MetaMask.
+  if (e.providers?.length) {
+    return e.providers.find((p: any) => p.isMetaMask) ?? e.providers[0]
+  }
+  return e
+}
 async function connectWallet() {
   try {
     error.value = ''
