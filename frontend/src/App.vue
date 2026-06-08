@@ -12,13 +12,13 @@
         <h2>Start a New Battle</h2>
         <input v-model="player1" placeholder="Enter Player 1 name" />
         <input v-model="player2" placeholder="Enter Player 2 name" />
-        <button @click="startBattle" :disabled="loading">{{ loading ? 'Starting...' : 'Start Battle' }}</button>
+        <button @click="startBattle" :disabled="loading || !player1 || !player2">{{ loading ? 'Starting...' : 'Start Battle' }}</button>
       </div>
       <div class="battle" v-if="battleStarted && !winner">
         <h2>⚔️ Attack</h2>
         <p>Current Turn: <strong>{{ currentTurn }}</strong></p>
         <input v-model="move" placeholder="Enter your move (e.g. Thunder Punch)" />
-        <button @click="attack" :disabled="loading">{{ loading ? 'Attacking...' : 'Attack!' }}</button>
+        <button @click="attack" :disabled="loading || !move">{{ loading ? 'Attacking...' : 'Attack!' }}</button>
       </div>
       <div class="winner-box" v-if="winner">
         <h2>🏆 {{ winner }} Wins!</h2>
@@ -32,12 +32,15 @@
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
+
 const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS || '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB') as `0x${string}`
+
 const player1 = ref('')
 const player2 = ref('')
 const move = ref('')
@@ -50,19 +53,22 @@ const error = ref('')
 const loading = ref(false)
 const walletConnected = ref(false)
 const walletAddress = ref('')
+
 const shortAddress = computed(() =>
   walletAddress.value ? walletAddress.value.slice(0, 6) + '...' + walletAddress.value.slice(-4) : ''
 )
+
 let client: any = null
+
 const eth = () => {
   const e = (window as any).ethereum
   if (!e) return null
-  // Multiple wallet extensions inject a providers[] array; pick MetaMask.
   if (e.providers?.length) {
     return e.providers.find((p: any) => p.isMetaMask) ?? e.providers[0]
   }
   return e
 }
+
 async function connectWallet() {
   try {
     error.value = ''
@@ -73,33 +79,53 @@ async function connectWallet() {
       await eth().request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + testnetBradbury.id.toString(16) }] })
     } catch (se: any) {
       if (se.code === 4902) {
-        await eth().request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x' + testnetBradbury.id.toString(16), chainName: testnetBradbury.name, rpcUrls: [testnetBradbury.rpcUrls.default.http[0]], nativeCurrency: testnetBradbury.nativeCurrency }] })
+        await eth().request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x' + testnetBradbury.id.toString(16),
+            chainName: testnetBradbury.name,
+            rpcUrls: [testnetBradbury.rpcUrls.default.http[0]],
+            nativeCurrency: testnetBradbury.nativeCurrency
+          }]
+        })
       }
     }
     client = createClient({ chain: testnetBradbury })
     walletConnected.value = true
-    await fetchStatus()
+    // Try to fetch existing battle state — silently ignore if no battle exists yet
+    try {
+      await fetchStatus()
+    } catch (_) {
+      battleStatus.value = 'No active battle'
+    }
   } catch (e: any) { error.value = e.message }
 }
+
 async function sendTx(functionName: string, args: any[]) {
+  const account = walletAddress.value as `0x${string}`
   const txHash = await client.writeContract({
     address: contractAddress,
     functionName,
     args,
     value: BigInt(0),
-    account: walletAddress.value as `0x${string}`,
+    account,
     transport: eth(),
   })
   await client.waitForTransactionReceipt({ hash: txHash, status: TransactionStatus.ACCEPTED })
 }
+
 async function startBattle() {
   try {
     loading.value = true; error.value = ''
     await sendTx('reset_battle', [player1.value, player2.value])
-    battleStarted.value = true; currentTurn.value = player1.value; winner.value = ''; battleLog.value = []
+    battleStarted.value = true
+    currentTurn.value = player1.value
+    winner.value = ''
+    battleLog.value = []
     await fetchStatus()
   } catch (e: any) { error.value = e.message } finally { loading.value = false }
 }
+
 async function attack() {
   try {
     loading.value = true; error.value = ''
@@ -108,24 +134,33 @@ async function attack() {
     await fetchStatus()
   } catch (e: any) { error.value = e.message } finally { loading.value = false }
 }
+
 async function fetchStatus() {
-  try {
-    const status = await client.readContract({ address: contractAddress, functionName: 'get_battle_status', args: [] })
-    battleStatus.value = status as string
-    const log = await client.readContract({ address: contractAddress, functionName: 'get_battle_log', args: [] })
-    battleLog.value = (log as string).split(' | ').filter(Boolean)
-    if ((status as string).includes('Winner')) {
-      winner.value = (status as string).split('Winner: ')[1]
-    } else {
-      const parts = (status as string).split('Current Turn: ')
-      if (parts[1]) currentTurn.value = parts[1]
-    }
-  } catch (e: any) { error.value = e.message }
+  const status = await client.readContract({ address: contractAddress, functionName: 'get_battle_status', args: [] })
+  battleStatus.value = status as string
+  const log = await client.readContract({ address: contractAddress, functionName: 'get_battle_log', args: [] })
+  battleLog.value = (log as string).split(' | ').filter(Boolean)
+  if ((status as string).includes('Winner')) {
+    winner.value = (status as string).split('Winner: ')[1]
+    battleStarted.value = true
+  } else if ((status as string).includes('Current Turn')) {
+    const parts = (status as string).split('Current Turn: ')
+    if (parts[1]) currentTurn.value = parts[1]
+    battleStarted.value = true
+  }
 }
+
 async function resetBattle() {
-  battleStarted.value = false; winner.value = ''; battleStatus.value = 'No active battle'; battleLog.value = []; player1.value = ''; player2.value = ''
+  battleStarted.value = false
+  winner.value = ''
+  battleStatus.value = 'No active battle'
+  battleLog.value = []
+  player1.value = ''
+  player2.value = ''
+  currentTurn.value = ''
 }
 </script>
+
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0f0f1a; color: #fff; font-family: 'Segoe UI', sans-serif; }
