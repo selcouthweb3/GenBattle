@@ -12,13 +12,17 @@
         <h2>Start a New Battle</h2>
         <input v-model="player1" placeholder="Enter Player 1 name" />
         <input v-model="player2" placeholder="Enter Player 2 name" />
-        <button @click="startBattle" :disabled="loading || !player1 || !player2">{{ loading ? 'Starting...' : 'Start Battle' }}</button>
+        <button @click="startBattle" :disabled="loading || !player1 || !player2">
+          {{ loading ? 'Starting...' : 'Start Battle' }}
+        </button>
       </div>
       <div class="battle" v-if="battleStarted && !winner">
         <h2>⚔️ Attack</h2>
         <p>Current Turn: <strong>{{ currentTurn }}</strong></p>
         <input v-model="move" placeholder="Enter your move (e.g. Thunder Punch)" />
-        <button @click="attack" :disabled="loading || !move">{{ loading ? 'Attacking...' : 'Attack!' }}</button>
+        <button @click="attack" :disabled="loading || !move">
+          {{ loading ? 'Attacking...' : 'Attack!' }}
+        </button>
       </div>
       <div class="winner-box" v-if="winner">
         <h2>🏆 {{ winner }} Wins!</h2>
@@ -39,7 +43,7 @@ import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 
-const contractAddress = (import.meta.env.VITE_CONTRACT_ADDRESS || '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB') as `0x${string}`
+const CONTRACT_ADDRESS = '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB' as `0x${string}`
 
 const player1 = ref('')
 const player2 = ref('')
@@ -55,31 +59,39 @@ const walletConnected = ref(false)
 const walletAddress = ref('')
 
 const shortAddress = computed(() =>
-  walletAddress.value ? walletAddress.value.slice(0, 6) + '...' + walletAddress.value.slice(-4) : ''
+  walletAddress.value
+    ? walletAddress.value.slice(0, 6) + '...' + walletAddress.value.slice(-4)
+    : ''
 )
 
 let client: any = null
 
-const eth = () => {
-  const e = (window as any).ethereum
-  if (!e) return null
-  if (e.providers?.length) {
-    return e.providers.find((p: any) => p.isMetaMask) ?? e.providers[0]
+const getProvider = () => {
+  const eth = (window as any).ethereum
+  if (!eth) return null
+  if (eth.providers?.length) {
+    return eth.providers.find((p: any) => p.isMetaMask) ?? eth.providers[0]
   }
-  return e
+  return eth
 }
 
 async function connectWallet() {
   try {
     error.value = ''
-    if (!eth()) { error.value = 'MetaMask not found.'; return }
-    const accounts = await eth().request({ method: 'eth_requestAccounts' })
+    const provider = getProvider()
+    if (!provider) { error.value = 'MetaMask not found.'; return }
+
+    const accounts = await provider.request({ method: 'eth_requestAccounts' })
     walletAddress.value = accounts[0]
+
     try {
-      await eth().request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x' + testnetBradbury.id.toString(16) }] })
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x' + testnetBradbury.id.toString(16) }]
+      })
     } catch (se: any) {
       if (se.code === 4902) {
-        await eth().request({
+        await provider.request({
           method: 'wallet_addEthereumChain',
           params: [{
             chainId: '0x' + testnetBradbury.id.toString(16),
@@ -90,56 +102,82 @@ async function connectWallet() {
         })
       }
     }
+
+    // Create genlayer client — no account passed here, we use provider for signing
     client = createClient({ chain: testnetBradbury })
     walletConnected.value = true
-    // Try to fetch existing battle state — silently ignore if no battle exists yet
-    try {
-      await fetchStatus()
-    } catch (_) {
-      battleStatus.value = 'No active battle'
-    }
-  } catch (e: any) { error.value = e.message }
+
+    // Try fetching existing battle state silently
+    try { await fetchStatus() } catch (_) { battleStatus.value = 'No active battle' }
+  } catch (e: any) {
+    error.value = e.message
+  }
 }
 
 async function sendTx(functionName: string, args: any[]) {
+  const provider = getProvider()
   const account = walletAddress.value as `0x${string}`
+
   const txHash = await client.writeContract({
-    address: contractAddress,
+    address: CONTRACT_ADDRESS,
     functionName,
     args,
-    value: BigInt(0),
     account,
-    transport: eth(),
+    transport: provider,
   })
-  await client.waitForTransactionReceipt({ hash: txHash, status: TransactionStatus.ACCEPTED })
+
+  await client.waitForTransactionReceipt({
+    hash: txHash,
+    status: TransactionStatus.ACCEPTED
+  })
 }
 
 async function startBattle() {
   try {
-    loading.value = true; error.value = ''
+    loading.value = true
+    error.value = ''
     await sendTx('reset_battle', [player1.value, player2.value])
     battleStarted.value = true
     currentTurn.value = player1.value
     winner.value = ''
     battleLog.value = []
     await fetchStatus()
-  } catch (e: any) { error.value = e.message } finally { loading.value = false }
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
 }
 
 async function attack() {
   try {
-    loading.value = true; error.value = ''
+    loading.value = true
+    error.value = ''
     await sendTx('attack', [currentTurn.value, move.value])
     move.value = ''
     await fetchStatus()
-  } catch (e: any) { error.value = e.message } finally { loading.value = false }
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
 }
 
 async function fetchStatus() {
-  const status = await client.readContract({ address: contractAddress, functionName: 'get_battle_status', args: [] })
+  const status = await client.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: 'get_battle_status',
+    args: []
+  })
   battleStatus.value = status as string
-  const log = await client.readContract({ address: contractAddress, functionName: 'get_battle_log', args: [] })
+
+  const log = await client.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName: 'get_battle_log',
+    args: []
+  })
   battleLog.value = (log as string).split(' | ').filter(Boolean)
+
   if ((status as string).includes('Winner')) {
     winner.value = (status as string).split('Winner: ')[1]
     battleStarted.value = true
