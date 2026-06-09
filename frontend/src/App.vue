@@ -122,8 +122,7 @@ async function sendTx(functionName: string, args: any[]) {
     address: CONTRACT_ADDRESS,
     functionName,
     args,
-    account,
-    transport: provider,
+    account: { address: account, type: 'json-rpc' },
   })
 
   await client.waitForTransactionReceipt({
