@@ -127,6 +127,8 @@ async function sendTx(functionName: string, args: any[]) {
   await client.waitForTransactionReceipt({
     hash: txHash,
     status: TransactionStatus.ACCEPTED,
+    retries: 40,
+    interval: 5000,
   })
 }
 
