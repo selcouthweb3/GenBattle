@@ -42,6 +42,7 @@ import { ref, computed } from 'vue'
 import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
+import { custom } from 'viem'
 
 const CONTRACT_ADDRESS = '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB' as `0x${string}`
 
@@ -103,11 +104,14 @@ async function connectWallet() {
       }
     }
 
-    // Create genlayer client — no account passed here, we use provider for signing
-    client = createClient({ chain: testnetBradbury })
-    walletConnected.value = true
+    // Create client with MetaMask as the transport so eth_sendTransaction goes through MetaMask
+    client = createClient({
+      chain: testnetBradbury,
+      transport: custom(provider),
+      account: walletAddress.value as `0x${string}`,
+    })
 
-    // Try fetching existing battle state silently
+    walletConnected.value = true
     try { await fetchStatus() } catch (_) { battleStatus.value = 'No active battle' }
   } catch (e: any) {
     error.value = e.message
@@ -115,19 +119,14 @@ async function connectWallet() {
 }
 
 async function sendTx(functionName: string, args: any[]) {
-  const provider = getProvider()
-  const account = walletAddress.value as `0x${string}`
-
   const txHash = await client.writeContract({
     address: CONTRACT_ADDRESS,
     functionName,
     args,
-    account: { address: account, type: 'json-rpc' },
   })
-
   await client.waitForTransactionReceipt({
     hash: txHash,
-    status: TransactionStatus.ACCEPTED
+    status: TransactionStatus.ACCEPTED,
   })
 }
 
@@ -169,14 +168,12 @@ async function fetchStatus() {
     args: []
   })
   battleStatus.value = status as string
-
   const log = await client.readContract({
     address: CONTRACT_ADDRESS,
     functionName: 'get_battle_log',
     args: []
   })
   battleLog.value = (log as string).split(' | ').filter(Boolean)
-
   if ((status as string).includes('Winner')) {
     winner.value = (status as string).split('Winner: ')[1]
     battleStarted.value = true
