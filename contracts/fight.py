@@ -92,3 +92,5 @@ class GenBattle(gl.Contract):
         self.player2_health = u256(100)
         self.current_turn = player1
         self.winner = ""
+        while len(self.battle_log) > 0:
+            self.battle_log.pop()

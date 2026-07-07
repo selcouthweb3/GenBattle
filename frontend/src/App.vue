@@ -44,7 +44,7 @@ import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
 import { custom } from 'viem'
 
-const CONTRACT_ADDRESS = '0xad34c6d277E9F2aDB169b7cD0B22b6Ce331F87cB' as `0x${string}`
+const CONTRACT_ADDRESS = '0xCa202FCa67DddFF95359211Fa16302887bBe4119' as `0x${string}`
 
 const player1 = ref('')
 const player2 = ref('')
