@@ -42,7 +42,6 @@ import { ref, computed } from 'vue'
 import { createClient } from 'genlayer-js'
 import { testnetBradbury } from 'genlayer-js/chains'
 import { TransactionStatus } from 'genlayer-js/types'
-import { custom } from 'viem'
 
 const CONTRACT_ADDRESS = '0xCa202FCa67DddFF95359211Fa16302887bBe4119' as `0x${string}`
 
@@ -107,7 +106,6 @@ async function connectWallet() {
     // Create client with MetaMask as the transport so eth_sendTransaction goes through MetaMask
     client = createClient({
       chain: testnetBradbury,
-      transport: custom(provider),
       account: walletAddress.value as `0x${string}`,
     })
 
